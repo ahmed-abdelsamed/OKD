@@ -1,0 +1,98 @@
+You are an expert OpenShift architect. Generate a detailed, step-by-step deployment guide for OKD (OpenShift Origin Community Distribution) using UPI (User Provisioned Infrastructure) on VMware ESXi 8 console, with the following exact requirements:
+
+## Environment Specifications:
+- **Domain**: svcexpert.net
+- **Cluster name**: ocp
+- **OKD version**: Latest stable (or specify 4.x latest)
+- **Deployment type**: Control plane only initially (3 nodes), worker nodes added later
+- **Infrastructure**: All VMs on VMware ESXi 8 console (not vCenter, direct ESXi host)
+- **Bastion OS**: Rocky Linux 9
+- **DNS Server**: Windows Server DNS
+- **Load Balancer**: HAProxy on bastion
+- **Web Server**: HTTPD on bastion (to host ignition files)
+
+## IP Addresses & Hostnames:
+| Hostname | IP Address | Role |
+|----------|------------|------|
+| bastion.ocp.svcexpert.net | 192.168.100.10 | Bastion (Rocky9, HAProxy, HTTPD) |
+| bootstrap.ocp.svcexpert.net | 192.168.100.14 |
+| cp0.ocp.svcexpert.net | 192.168.100.15 | Control plane node 0 |
+| cp1.ocp.svcexpert.net | 192.168.100.16 | Control plane node 1 |
+| cp2.ocp.svcexpert.net | 192.168.100.17 | Control plane node 2 |
+| api.ocp.svcexpert.net | 192.168.100.11 | API VIP (on bastion NIC with multiple IPs) |
+| api-int.ocp.svcexpert.net | 192.168.100.12 | Internal API VIP (on bastion NIC) |
+| *.apps.ocp.svcexpert.net | 192.168.100.13 | Apps wildcard VIP (on bastion NIC) |
+
+**Critical Note**: IPs 11, 12, 13 are all on the same interface (ens18) of the bastion server, configured using `nmcli` with multiple IP addresses (not separate interfaces).
+
+## DNS Configuration (Windows Server DNS):
+Provide all required DNS records (A, PTR, SRV) for:
+- api.ocp.svcexpert.net → 192.168.100.11
+- api-int.ocp.svcexpert.net → 192.168.100.12
+- *.apps.ocp.svcexpert.net → 192.168.100.13
+- cp0, cp1, cp2 → their respective IPs
+- bastion → 192.168.100.10
+- etcd SRV records for control plane nodes
+
+## Load Balancer (HAProxy on bastion):
+Configure HAProxy to balance:
+- Port 6443 (Kubernetes API) across cp0:6443, cp1:6443, cp2:6443
+- Port 22623 (Machine Config) across cp0:22623, cp1:22623, cp2:22623
+- Port 80/443 for ingress later (prepare config, can be disabled initially)
+
+## OKD Specifics:
+- Generate install-config.yaml with platform: none (UPI)
+- Create ignition files (bootstrap, master, worker) using openshift-install binary
+- Use OKD's internal CA (not custom certificates initially)
+- Bootstrap node will be temporary (provide VM specs, but destroy after control plane is up)
+
+## VM Creation on ESXi 8 Console (No vCenter):
+For each VM (bootstrap, cp0, cp1, cp2):
+- Provide exact ESXi CLI commands (esxcli, vmkfstools) to create VMs
+- VM specs: 4 vCPU, 16GB RAM, 120GB disk for control plane; bootstrap can be smaller
+- Network: Attach to correct port group (VM Network or your production VLAN)
+- Boot order: Ensure disk boot, no PXE unless specified
+- Assign static IPs via kernel arguments in ignition (not DHCP)
+
+## Critical Sequence for Powering On:
+Provide a **strict sequence order** with verification steps between each:
+1. Bastion server (with all IPs configured via nmcli, services installed)
+2. DNS configuration verification on Windows Server
+3. HTTPD server (host ignition files, verify accessibility)
+4. HAProxy configuration and verification (check stats page)
+5. Bootstrap VM (power on, wait for completion signals)
+6. Control plane node 0 (wait for etcd membership)
+7. Control plane node 1 (wait for joining)
+8. Control plane node 2 (wait for cluster to become operational)
+9. Verify cluster health (oc get nodes, clusteroperators)
+10. Destroy bootstrap VM (critical step)
+11. Prepare for worker nodes (but DO NOT deploy yet - just instructions)
+
+## Specific Commands to Include:
+- **nmcli commands** to assign 192.168.100.11, .12, .13 on bastion's ens18
+- **HAProxy configuration** (full /etc/haproxy/haproxy.cfg)
+- **Windows DNS** record creation using PowerShell or DNS MMC steps
+- **Generating ignition files** with correct proxy if needed (none in this case)
+- **Extracting kubeadmin password** from control plane after bootstrap removal
+- **Validation commands** at each stage: curl to API, dig for DNS, HAProxy stats, etc.
+
+## Important Constraints:
+- No automated installer like Assisted Installer - pure UPI manual steps
+- Must work with OKD's self-signed CA (no custom certs)
+- Workers added later - ensure cluster is fully operational with 3 control plane nodes first
+- All traffic internal (192.168.100.x) - no load balancer on public IPs
+- Provide troubleshooting commands for common UPI failures (certificate issues, etcd problems, API not responding)
+
+## Output Format:
+Present the guide as a markdown document with:
+- Prerequisites (hardware, software, access)
+- Phase 1: Bastion & Services Setup (with exact commands)
+- Phase 2: DNS Configuration
+- Phase 3: Ignition File Generation
+- Phase 4: VM Creation on ESXi 8 Console
+- Phase 5: Sequential Deployment & Power-On Order
+- Phase 6: Post-Deployment & Bootstrap Removal
+- Phase 7: Worker Node Addition Instructions (for later)
+- Appendix: Troubleshooting & Validation Commands
+
+Make every command copy-paste ready, with explanations of what each command does. Assume the user has root/administrator access to all systems.
